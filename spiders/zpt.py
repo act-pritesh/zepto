@@ -15,9 +15,10 @@ from scrapy.crawler import CrawlerProcess
 
 class ZeptoSpiderSpider(scrapy.Spider):
     name = "zpt"
-    # allowed_domains = ["zepto.com"]
-    # start_urls = ["https://zepto.com"]
 
+
+    fetch_table='fetch_leftover_product'
+    create_and_insert_table='zepto_data_master_2_data_left'
 
     def __init__(self, start_id, end_id):
         super(ZeptoSpiderSpider, self).__init__()
@@ -25,7 +26,7 @@ class ZeptoSpiderSpider(scrapy.Spider):
         self.start_id = start_id
         self.end_id = end_id
 
-        # Replace with your actual MySQL database credentials
+        #MySQL database credentials
         self.db_conn = pymysql.connect(
             host='localhost',
             user='root',
@@ -72,33 +73,39 @@ class ZeptoSpiderSpider(scrapy.Spider):
             'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         }
         # Fetch URLs with status 'pending' from the database
-        self.cursor.execute(f"SELECT id, url FROM distinct_product_urls  WHERE status = 'pending' and id between {self.start_id} and {self.end_id}")
+        self.cursor.execute(f"SELECT id, product_url FROM {self.fetch_table}  WHERE status = 'pending' and id between {self.start_id} and {self.end_id}")
         rows = self.cursor.fetchall()
         request_count = 0  # To track the number of requests made
         # Loop through rows and yield requests for each URL
+        random_number = random.randint(10000000, 99999999)
+        # username = f'actowiz-stc-US'
+        username = f'actowiz-res-US-any-sid-{random_number}'
+        password = 'yYNSa0hbTdfNUIh'
+        server = 'gw.ntnt.io'
+        port = '5959'
+        # proxy = {
+        #     'http': f'http://{username}:{password}@{server}:{port}',
+        #     'https': f'http://{username}:{password}@{server}:{port}'
+        # }
         for row in rows:
             id, url = row
-            max_requests_before_vpn_change = 500  # Change VPN after this many requests
-            if request_count==max_requests_before_vpn_change:
-                with ExpressVpnApi() as api:
-                    # locations = api.locations
-                    # us_entries = [entry for entry in locations if entry['country_code'] == 'US']
-                    # with open('../../../../../Desktop/Pritesh_project/zepto/zepto/us.json', 'w') as file:
-                    #     json.dump(us_entries, file)
-
-                    with open(r"C:\Users\Actowiz\Desktop\Pritesh_project\zepto\zepto\us.json", "r") as file:
-                        data = json.load(file)
-
-                    if isinstance(data, list):
-                        loc = random.choice(data)
-                        print("Selected Location:", loc)
-                        api.connect(loc["id"])
-                        time.sleep(6)
-                        request_count=0
-                    else:
-                        print("The JSON data is not a list.")
-            else:
-                request_count +=1
+            # max_requests_before_vpn_change = 500  # Change VPN after this many requests
+            # if request_count==max_requests_before_vpn_change:
+            #     with ExpressVpnApi() as api:
+            #
+            #         with open(r"C:\Users\Actowiz\Desktop\Pritesh_project\zepto\zepto\us.json", "r") as file:
+            #             data = json.load(file)
+            #
+            #         if isinstance(data, list):
+            #             loc = random.choice(data)
+            #             print("Selected Location:", loc)
+            #             api.connect(loc["id"])
+            #             time.sleep(6)
+            #             request_count=0
+            #         else:
+            #             print("The JSON data is not a list.")
+            # else:
+            #     request_count +=1
 
             yield scrapy.Request(url,
                                  headers=headers,
@@ -106,12 +113,13 @@ class ZeptoSpiderSpider(scrapy.Spider):
                                  callback=self.parse,
                                  meta={
                                      'id': id,
-                                     'impersonate': 'edge99'
+                                     'impersonate': 'edge99',
+                                     'proxy':f'http://{username}:{password}@{server}:{port}'
                                        })
 
     def create_scraped_data_table(self):
-        create_table_query = """
-        CREATE TABLE IF NOT EXISTS zepto_data_master_2 (
+        create_table_query = f"""
+        CREATE TABLE IF NOT EXISTS {self.create_and_insert_table} (
             ID INT AUTO_INCREMENT PRIMARY KEY,
             ProductCode TEXT ,
             ProductURL TEXT ,
@@ -137,6 +145,7 @@ class ZeptoSpiderSpider(scrapy.Spider):
         except Exception as e:
             self.logger.error(f"Error creating table: {e}")
 
+
     def get_availability(self,response):
         parsed = lxml.html.fromstring(response.text)
         availability = parsed.xpath('//button[@aria-label="Increase quantity by 1"]/@disabled | //button[@aria-label="Notify Me"]')
@@ -144,6 +153,7 @@ class ZeptoSpiderSpider(scrapy.Spider):
             return 'In Stock'
         else:
             return 'Out of stock'
+
     # Parsing the response and updating the status
     def parse(self, response):
         # Get the ID from the meta attribute
@@ -151,21 +161,21 @@ class ZeptoSpiderSpider(scrapy.Spider):
 
         # Process the response (example: extract title)
         product_code = response.url.rstrip('/').split('/')[-1]
-        # filename = f"{product_code}.html"
-        # # Define the path where the response will be saved
-        # save_directory = r"C:\Users\Actowiz\Desktop\zepto_response"
-        #
-        # # Ensure the save directory exists
-        # if not os.path.exists(save_directory):
-        #     os.makedirs(save_directory)
-        #
-        # # Full path to save the file
-        # file_path = os.path.join(save_directory, filename)
-        #
-        # # Save the response to the specified path
-        # with open(file_path, 'wb') as f:
-        #     f.write(response.body)
-        # self.log(f"Saved response to {file_path}")
+        filename = f"{product_code}.html"
+        # Define the path where the response will be saved
+        save_directory = r"C:\Users\Actowiz\Desktop\zepto_response_2"
+
+        # Ensure the save directory exists
+        if not os.path.exists(save_directory):
+            os.makedirs(save_directory)
+
+        # Full path to save the file
+        file_path = os.path.join(save_directory, filename)
+
+        # Save the response to the specified path
+        with open(file_path, 'wb') as f:
+            f.write(response.body)
+        self.log(f"Saved response to {file_path}")
         product_url=response.url
         product_name=response.xpath('//span[@class="text-sm font-semibold leading-[14px] text-[#101418]"]/text()').get('')
         if not product_name or product_name.strip() == '':
@@ -174,9 +184,11 @@ class ZeptoSpiderSpider(scrapy.Spider):
             return  # Exit the parse function, no further processing needed # Exit the parse function, no further processing needed
 
         product_img=response.xpath('//div[@class="relative aspect-square h-full w-full snap-center"]/img[1]/@src').get(' ')
-        quantity=' '
+        quantity=response.xpath('//p[@class="mt-2 text-sm leading-4 text-[#757C8D]"]/span/text()').get('')
         mrp=response.xpath('//span[@class="line-through font-bold"]/text()').get('')
+        mrp_final=mrp.replace('₹','')
         selling_price=response.xpath('//span[@class="text-[32px] font-medium leading-[30px] text-[#262A33]"]/text()').get('')
+        selling_price_final=selling_price.replace('₹','')
         discount=response.xpath('//p[@class="text-[14px] font-semibold leading-[21.6px] tracking-[-0.24px] text-[#079761]"]//text()').getall()
         final_dic=''.join(discount)
         stock_availability=self.get_availability(response)
@@ -187,30 +199,27 @@ class ZeptoSpiderSpider(scrapy.Spider):
 
         # Combine categories and name
         formatted_category = ' | '.join(category + [name])
-        rating=' '
-        reviews=' '
+        rating=''
+        reviews=''
         pincode=''
         delivery_time=''
         city=''
         date1=datetime.date.today()
         # Format the date in "DD-MM-YYYY" format
         formatted_date = date1.strftime("%d-%m-%Y")
-        print(product_code, product_url, product_name, product_img, quantity, mrp, selling_price, final_dic, stock_availability, formatted_category, rating, reviews, pincode, delivery_time, city, formatted_date)
+        print(product_code, product_url, product_name, product_img, quantity, mrp_final, selling_price_final, final_dic, stock_availability, formatted_category, rating, reviews, pincode, delivery_time, city, formatted_date)
 
         # # Insert the scraped data into the new table
-        self.insert_scraped_data(product_code, product_url, product_name, product_img, quantity, mrp, selling_price, final_dic, stock_availability, formatted_category, rating, reviews, pincode, delivery_time, city, formatted_date)
+        self.insert_scraped_data(product_code, product_url, product_name, product_img, quantity, mrp_final, selling_price_final, final_dic, stock_availability, formatted_category, rating, reviews, pincode, delivery_time, city, formatted_date)
         #
         # # Now update the database to mark the URL as "done"
         self.update_status(record_id)
 
-        # For example, store the scraped data (you can save it into a file or process it further)
-        # self.log(f"Scraped data from {response.url})
-
 # Function to insert the scraped data into the new table
     def insert_scraped_data(self, product_code, product_url, product_name, product_img, quantity, mrp, selling_price, discount, stock_availability, category, rating, reviews, pincode, delivery_time, city, date):
         # SQL query to insert data into the scraped_data table
-        insert_query = """
-        INSERT INTO zepto_data_master_2 (
+        insert_query =f"""
+        INSERT INTO {self.create_and_insert_table} (
             ProductCode, ProductURL, ProductName, Image, Quantity, MRP, SellingPrice, Discount,
             StockAvailability, Categories, Rating, Reviews, Pincode, DeliveryTime, City, Date
         )
@@ -226,12 +235,12 @@ class ZeptoSpiderSpider(scrapy.Spider):
     # Function to update the status to 'done'
     def update_status(self, record_id):
         # Update the status in the database to 'done' after scraping the URL
-        self.cursor.execute("UPDATE distinct_product_urls SET status = 'done' WHERE id = %s", (record_id,))
+        self.cursor.execute(f"UPDATE {self.fetch_table} SET status = 'done' WHERE id = %s", (record_id,))
         self.db_conn.commit()
 
     def update_status_to_404(self, record_id):
         # Update the status in the database to '404' when product name is not found
-        update_query = "UPDATE distinct_product_urls SET status = '404' WHERE id = %s"
+        update_query = f"UPDATE {self.fetch_table} SET status = '404' WHERE id = %s"
         self.cursor.execute(update_query, (record_id,))
         self.db_conn.commit()
 
